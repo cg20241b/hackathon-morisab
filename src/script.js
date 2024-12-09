@@ -30,87 +30,118 @@ void main() {
 }
 `;
 
-
 const lightCubeMaterial = new THREE.ShaderMaterial({
     vertexShader: cubeVertexShader,
     fragmentShader: cubeFragmentShader,
     blending: THREE.AdditiveBlending,
     transparent: true,
 });
+const pointLight = new THREE.PointLight(0xffffff, 1, 10);
+pointLight.position.set(0, 0, 5);
+scene.add(pointLight);
 
-const lightCubeGeometry = new THREE.BoxGeometry(1, 1, 1); // Increased size from 0.5 to 1
+const lightCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
 const lightCube = new THREE.Mesh(lightCubeGeometry, lightCubeMaterial);
-lightCube.position.set(0, 0, 0);
+lightCube.position.set(0, 0, 1);
 scene.add(lightCube);
 
-// Shader materials for text (alphabet and digit)
 let shaderMaterialAlphabet, shaderMaterialDigit;
 
 // Load font and create 3D text
 const fontLoader = new FontLoader();
 fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.json', (font) => {
-    // Vertex and fragment shaders for characters
-    const charVertexShader = `
-  varying vec3 vNormal;
-  varying vec3 vPosition;
-
-  void main() {
-    vNormal = normal;
-    vPosition = position;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-  `;
-
-    const charFragmentShader = `
-  uniform vec3 lightPosition;
-  uniform vec3 baseColor;
-  uniform float ambientIntensity;
-  
-  varying vec3 vNormal;
-  varying vec3 vPosition;
-  
-  void main() {
-    vec3 lightDir = normalize(lightPosition - vPosition);
-    float diffuse = max(dot(vNormal, lightDir), 0.0);
-    
-    vec3 viewDir = normalize(-vPosition);
-    vec3 reflectDir = reflect(-lightDir, vNormal);
-    float specular = pow(max(dot(viewDir, reflectDir), 0.0), 32.0); // Sharp specular highlight
-  
-    vec3 ambient = baseColor * ambientIntensity;
-    vec3 diffuseColor = baseColor * diffuse;
-    vec3 specularColor = vec3(1.0) * specular; // White specular highlights
-    
-    gl_FragColor = vec4(ambient + diffuseColor + specularColor, 1.0);
-  }
-  `;
-
-
-    const lightPosition = new THREE.Vector3(0, 0, 0); // Posisi cube sebagai sumber cahaya
-    const abc = 314; // Last ID + 200
+    const abc = 314; // Last three digits + 200
     const ambientIntensity = abc / 1000;
+
+    const alphabetVertexShader = `
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition;
+
+    void main() {
+        vNormal = normalize(normal);
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vWorldPosition = worldPosition.xyz;
+
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+    `;
+
+    const alphabetFragmentShader = `
+    uniform vec3 lightPosition;
+    uniform vec3 baseColor;
+    uniform float ambientIntensity;
+
+    varying vec3 vNormal;
+    varying vec3 vWorldPosition; // Posisi dunia objek
+
+    void main() {
+        vec3 lightDir = normalize(lightPosition - vWorldPosition);
+        float diffuse = max(dot(vNormal, lightDir), 0.0);
+        vec3 viewDir = normalize(-vWorldPosition);
+        vec3 reflectDir = reflect(-lightDir, vNormal);
+        float specular = pow(max(dot(viewDir, reflectDir), 0.0), 16.0); // Shininess lebih rendah
+        vec3 ambient = baseColor * ambientIntensity;
+        vec3 diffuseColor = baseColor * diffuse;
+        vec3 specularColor = vec3(1.0) * specular;
+        gl_FragColor = vec4(ambient + diffuseColor + specularColor, 1.0);
+    }
+    `;
+
+    const digitVertexShader = `
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+
+    void main() {
+        vNormal = normalize(normal);
+        vPosition = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+    `;
+
+
+    const digitFragmentShader = `
+    uniform vec3 lightPosition;
+    uniform vec3 baseColor;
+    uniform float ambientIntensity;
+
+    varying vec3 vNormal;
+    varying vec3 vPosition;
+
+    void main() {
+        vec3 lightDir = normalize(lightPosition - vPosition);
+        float diffuse = max(dot(vNormal, lightDir), 0.0);
+        vec3 viewDir = normalize(-vPosition);
+        vec3 reflectDir = reflect(-lightDir, vNormal); 
+        float specular = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
+        vec3 ambient = baseColor * ambientIntensity;
+        vec3 diffuseColor = baseColor * diffuse;
+        vec3 specularColor = baseColor * specular;
+        gl_FragColor = vec4(ambient + diffuseColor + specularColor, 1.0);
+    }
+    `;
+
 
     shaderMaterialAlphabet = new THREE.ShaderMaterial({
         uniforms: {
-            lightPosition: { value: lightPosition },
+            lightPosition: { value: lightCube.position },
             baseColor: { value: new THREE.Color(0, 0.455, 0.455) },
             ambientIntensity: { value: ambientIntensity },
         },
-        vertexShader: charVertexShader,
-        fragmentShader: charFragmentShader,
+        vertexShader: alphabetVertexShader,
+        fragmentShader: alphabetFragmentShader,
     });
 
     shaderMaterialDigit = new THREE.ShaderMaterial({
         uniforms: {
-            lightPosition: { value: lightPosition },
+            lightPosition: { value: lightCube.position },
             baseColor: { value: new THREE.Color(1, 0.545, 0.545) },
             ambientIntensity: { value: ambientIntensity },
         },
-        vertexShader: charVertexShader,
-        fragmentShader: charFragmentShader,
+        vertexShader: digitVertexShader,
+        fragmentShader: digitFragmentShader,
     });
 
-    // Create text geometries
+
     const textGeometryLeft = new TextGeometry('S', {
         font: font,
         size: 2.5,
@@ -124,11 +155,11 @@ fontLoader.load('https://threejs.org/examples/fonts/helvetiker_regular.typeface.
     });
 
     const textMeshLeft = new THREE.Mesh(textGeometryLeft, shaderMaterialAlphabet);
-    textMeshLeft.position.set(-5, 0, 0);
+    textMeshLeft.position.set(-4, 0, 0);
     scene.add(textMeshLeft);
 
     const textMeshRight = new THREE.Mesh(textGeometryRight, shaderMaterialDigit);
-    textMeshRight.position.set(5, 0, 0);
+    textMeshRight.position.set(2, 0, 0);
     scene.add(textMeshRight);
 });
 
